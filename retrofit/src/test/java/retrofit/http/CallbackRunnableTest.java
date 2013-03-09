@@ -28,7 +28,7 @@ public class CallbackRunnableTest {
   }
 
   @Test public void responsePassedToSuccess() {
-    ResponseWrapper wrapper = new ResponseWrapper(null, new Object());
+    ResponseWrapper wrapper = new ResponseWrapper(null, new Object(), invocationTime);
     when(callbackRunnable.obtainResponse()).thenReturn(wrapper);
 
     callbackRunnable.run();

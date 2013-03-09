@@ -76,7 +76,7 @@ public class RequestBuilderTest {
     assertThat(request.getUrl()).isEqualTo("http://example.com/foo/bar/pong/?kit=kat&riff=raff");
     assertThat(request.getBody()).isNull();
   }
-  
+
   @Test public void getWithPathAndQueryQuestionMarkParam() throws Exception {
     Request request = new Helper() //
         .setMethod("GET") //
@@ -90,7 +90,7 @@ public class RequestBuilderTest {
     assertThat(request.getUrl()).isEqualTo("http://example.com/foo/bar/pong%3F/?kit=kat%3F");
     assertThat(request.getBody()).isNull();
   }
-  
+
   @Test public void getWithPathAndQueryAmpersandParam() throws Exception {
     Request request = new Helper() //
         .setMethod("GET") //
@@ -104,7 +104,7 @@ public class RequestBuilderTest {
     assertThat(request.getUrl()).isEqualTo("http://example.com/foo/bar/pong%26/?kit=kat%26");
     assertThat(request.getBody()).isNull();
   }
-  
+
   @Test public void getWithPathAndQueryHashParam() throws Exception {
     Request request = new Helper() //
         .setMethod("GET") //
@@ -363,7 +363,7 @@ public class RequestBuilderTest {
       }
 
       // Create a fake rest method annotation based on set values.
-      RestMethod restMethod = mock(RestMethod.class);
+      HTTP restMethod = mock(HTTP.class);
       when(restMethod.hasBody()).thenReturn(hasBody);
       when(restMethod.value()).thenReturn(this.method);
 

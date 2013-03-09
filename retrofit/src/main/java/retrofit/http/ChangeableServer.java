@@ -24,7 +24,7 @@ public class ChangeableServer extends Server {
     this.url = url;
   }
 
-  /** Update the URL and name returned by {@link #getUrl()} and {@link #getName()}, respetively. */
+  /** Update the URL and name returned by {@link #getUrl()} and {@link #getName()}, respectively. */
   public void update(String url, String name) {
     this.url = url;
     this.name = name;

@@ -5,12 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 import static java.lang.annotation.ElementType.METHOD;
-import static java.lang.annotation.RetentionPolicy.RUNTIME;
+import static java.lang.annotation.RetentionPolicy.CLASS;
 
 /** Make a HEAD request to a REST path relative to base URL. */
 @Target(METHOD)
-@Retention(RUNTIME)
-@RestMethod("HEAD")
+@Retention(CLASS)
 public @interface HEAD {
   String value();
 }

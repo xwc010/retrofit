@@ -289,7 +289,7 @@ public class RestMethodInfoTest {
     assertThat(methodInfo.path).isEqualTo("/foo");
   }
 
-  @RestMethod("CUSTOM1")
+  @HTTP("CUSTOM1")
   @Target(METHOD) @Retention(RUNTIME)
   private @interface CUSTOM1 {
     String value();
@@ -311,7 +311,7 @@ public class RestMethodInfoTest {
     assertThat(methodInfo.path).isEqualTo("/foo");
   }
 
-  @RestMethod(value = "CUSTOM2", hasBody = true)
+  @HTTP(value = "CUSTOM2", hasBody = true)
   @Target(METHOD) @Retention(RUNTIME)
   private @interface CUSTOM2 {
     String value();

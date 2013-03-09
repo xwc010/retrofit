@@ -12,7 +12,7 @@ public interface Profiler<T> {
    * Invoked before an HTTP method call. The object returned by this method will be
    * passed to {@link #afterCall} when the call returns.
    * <p>
-   * This method gives implementors the opportunity to include information that may
+   * This method gives implementers the opportunity to include information that may
    * change during the server call in {@code afterCall} logic.
    */
   T beforeCall();
@@ -32,15 +32,13 @@ public interface Profiler<T> {
   /** Information about the HTTP request. */
   public static final class RequestInformation {
     private final String method;
-    private final String baseUrl;
     private final String relativePath;
     private final long contentLength;
     private final String contentType;
 
-    public RequestInformation(String method, String baseUrl, String relativePath,
-        long contentLength, String contentType) {
+    public RequestInformation(String method, String relativePath, long contentLength,
+        String contentType) {
       this.method = method;
-      this.baseUrl = baseUrl;
       this.relativePath = relativePath;
       this.contentLength = contentLength;
       this.contentType = contentType;
@@ -49,11 +47,6 @@ public interface Profiler<T> {
     /** Returns the HTTP method of the originating request. */
     public String getMethod() {
       return method;
-    }
-
-    /** Returns the URL to which the originating request was sent. */
-    public String getBaseUrl() {
-      return baseUrl;
     }
 
     /** Returns the path relative to the base URL to which the originating request was sent. */

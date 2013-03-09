@@ -1,3 +1,4 @@
+// Copyright 2013 Square, Inc.
 package retrofit.http;
 
 import retrofit.http.client.Response;
@@ -9,12 +10,13 @@ import retrofit.http.client.Response;
  * @author JJ Ford (jj.n.ford@gmail.com)
  */
 final class ResponseWrapper {
-
   final Response response;
   final Object responseBody;
+  final long invocationTime;
 
-  public ResponseWrapper(Response response, Object responseBody) {
+  ResponseWrapper(Response response, Object responseBody, long invocationTime) {
     this.response = response;
     this.responseBody = responseBody;
+    this.invocationTime = invocationTime;
   }
 }

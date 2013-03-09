@@ -2,24 +2,16 @@
 package retrofit.http;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
+import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Type;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.net.URLEncoder;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 import java.util.logging.Logger;
-import retrofit.http.Profiler.RequestInformation;
 import retrofit.http.client.Client;
 import retrofit.http.client.Request;
 import retrofit.http.client.Response;
-import retrofit.http.mime.TypedByteArray;
 import retrofit.http.mime.TypedInput;
-import retrofit.http.mime.TypedOutput;
 
 import static retrofit.http.Utils.SynchronousExecutor;
 
@@ -32,6 +24,7 @@ import static retrofit.http.Utils.SynchronousExecutor;
 public class RestAdapter {
   private static final Logger LOGGER = Logger.getLogger(RestAdapter.class.getName());
   private static final int LOG_CHUNK_SIZE = 4000;
+  private static final String SUFFIX = "$$RetrofitImpl";
   static final String THREAD_PREFIX = "Retrofit-";
 
   private final Server server;
@@ -89,170 +82,100 @@ public class RestAdapter {
     if (!type.isInterface()) {
       throw new IllegalArgumentException("Only interface endpoint definitions are supported.");
     }
-    return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[] { type },
-        new RestHandler());
+    String name = type.getName();
+    try {
+      Class<?> impl = Class.forName(name + SUFFIX);
+      Constructor<?> constructor = impl.getConstructor(RestAdapter.class);
+      return (T) constructor.newInstance(this);
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException("Unable to load generated implementation for " + name, e);
+    }
   }
 
-  private class RestHandler implements InvocationHandler {
-    private final Map<Method, RestMethodInfo> methodDetailsCache =
-        new LinkedHashMap<Method, RestMethodInfo>();
+  public abstract static class RestHandler {
+    protected final Server server;
+    protected final Converter converter;
+    protected final Headers headers;
+    protected final Profiler profiler;
+    private final Client.Provider client;
+    private final Executor httpExecutor;
+    private final Executor callbackExecutor;
 
-    @SuppressWarnings("unchecked") //
-    @Override public Object invoke(Object proxy, Method method, final Object[] args)
-        throws InvocationTargetException, IllegalAccessException {
-      // If the method is a method from Object then defer to normal invocation.
-      if (method.getDeclaringClass() == Object.class) {
-        return method.invoke(this, args);
-      }
-
-      // Load or create the details cache for the current method.
-      final RestMethodInfo methodDetails;
-      synchronized (methodDetailsCache) {
-        RestMethodInfo tempMethodDetails = methodDetailsCache.get(method);
-        if (tempMethodDetails == null) {
-          tempMethodDetails = new RestMethodInfo(method);
-          methodDetailsCache.put(method, tempMethodDetails);
-        }
-        methodDetails = tempMethodDetails;
-      }
-
-      if (methodDetails.isSynchronous) {
-        return invokeRequest(methodDetails, args);
-      }
-
-      if (httpExecutor == null || callbackExecutor == null) {
-        throw new IllegalStateException("Asynchronous invocation requires calling setExecutors.");
-      }
-      Callback<?> callback = (Callback<?>) args[args.length - 1];
-      httpExecutor.execute(new CallbackRunnable(callback, callbackExecutor) {
-        @Override public ResponseWrapper obtainResponse() {
-          return (ResponseWrapper) invokeRequest(methodDetails, args);
-        }
-      });
-      return null; // Asynchronous methods should have return type of void.
+    protected RestHandler(RestAdapter restAdapter) {
+      server = restAdapter.server;
+      converter = restAdapter.converter;
+      headers = restAdapter.headers;
+      profiler = restAdapter.profiler;
+      client = restAdapter.clientProvider;
+      httpExecutor = restAdapter.httpExecutor;
+      callbackExecutor = restAdapter.callbackExecutor;
     }
 
-    /**
-     * Execute an HTTP request.
-     *
-     * @return HTTP response object of specified {@code type}.
-     * @throws RetrofitError Thrown if any error occurs during the HTTP request.
-     */
-    private Object invokeRequest(RestMethodInfo methodDetails, Object[] args) {
-      methodDetails.init(); // Ensure all relevant method information has been loaded.
-
-      String url = server.getUrl();
+    protected ResponseWrapper execute(Request request) {
       try {
-        Request request = new RequestBuilder(converter) //
-            .setApiUrl(server.getUrl())
-            .setArgs(args)
-            .setHeaders(headers.get())
-            .setMethodInfo(methodDetails)
-            .build();
-        url = request.getUrl();
+        //Object profilerObject = null;
+        //if (profiler != null) {
+        //  profilerObject = profiler.beforeCall();
+        //}
 
-        if (!methodDetails.isSynchronous) {
-          // If we are executing asynchronously then update the current thread with a useful name.
-          Thread.currentThread().setName(THREAD_PREFIX + url);
-        }
-
-        if (LOGGER.isLoggable(Level.FINE)) {
-          logRequest(request);
-        }
-
-        Object profilerObject = null;
-        if (profiler != null) {
-          profilerObject = profiler.beforeCall();
-        }
-
-        long start = System.nanoTime();
-        Response response = clientProvider.get().execute(request);
-        long elapsedTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        long time = System.nanoTime();
+        Response response = client.get().execute(request);
+        time = (System.nanoTime() - time) / 1000000;
 
         int statusCode = response.getStatus();
-        if (profiler != null) {
-          RequestInformation requestInfo = getRequestInfo(server, methodDetails, request);
-          profiler.afterCall(requestInfo, elapsedTime, statusCode, profilerObject);
-        }
+        //if (profiler != null) {
+        //Profiler.RequestInformation requestInfo = getRequestInfo(server, methodDetails, request);
+        //  profiler.afterCall(requestInfo, time, statusCode, profilerObject);
+        //}
 
         TypedInput body = response.getBody();
-        if (LOGGER.isLoggable(Level.FINE)) {
-          // Replace the response since the logger needs to consume the entire input stream.
-          body = logResponse(url, response.getStatus(), body, elapsedTime);
-        }
+        //if (LOGGER.isLoggable(Level.FINE)) {
+        //  //Replace the response since the logger needs to consume the entire input stream.
+        //  body = logResponse(request.getUrl(), response.getStatus(), body, elapsedTime);
+        //}
 
-        Type type = methodDetails.type;
+        Type type = null; //methodDetails.type;
         if (statusCode >= 200 && statusCode < 300) { // 2XX == successful request
-          if (type.equals(Response.class)) {
-            if (methodDetails.isSynchronous) {
-              return response;
-            }
-            return new ResponseWrapper(response, response);
-          }
-          if (body == null) {
-            return new ResponseWrapper(response, null);
-          }
-          try {
-            Object convert = converter.fromBody(body, type);
-            if (methodDetails.isSynchronous) {
-              return convert;
-            }
-            return new ResponseWrapper(response, convert);
-          } catch (ConversionException e) {
-            throw RetrofitError.conversionError(url, response, converter, type, e);
-          }
+          //if (type.equals(Response.class)) {
+            return null; // TODO response;
+          //}
+          //if (body == null) {
+          //  return null;
+          //}
+          //try {
+          //  return converter.fromBody(body, type);
+          //} catch (ConversionException e) {
+          //  throw RetrofitError.conversionError(request.getUrl(), response, converter, type, e);
+          //}
         }
-        throw RetrofitError.httpError(url, response, converter, type);
+        throw RetrofitError.httpError(request.getUrl(), response, converter, type);
       } catch (RetrofitError e) {
         throw e; // Pass through our own errors.
       } catch (IOException e) {
-        throw RetrofitError.networkError(url, e);
+        throw RetrofitError.networkError(request.getUrl(), e);
       } catch (Throwable t) {
-        throw RetrofitError.unexpectedError(url, t);
+        throw RetrofitError.unexpectedError(request.getUrl(), t);
       }
     }
-  }
 
-  private static void logRequest(Request request) {
-    LOGGER.fine("---> HTTP " + request.getMethod() + " " + request.getUrl());
-    for (Header header : request.getHeaders()) {
-      LOGGER.fine(header.getName() + ": " + header.getValue());
-    }
-    LOGGER.fine("---> END HTTP");
-  }
-
-  /** Log response data. Returns replacement {@link TypedInput}. */
-  private static TypedInput logResponse(String url, int statusCode, TypedInput body,
-      long elapsedTime) throws IOException {
-    LOGGER.fine("<--- HTTP " + statusCode + " " + url + " (" + elapsedTime + "ms)");
-
-    byte[] bodyBytes = Utils.streamToBytes(body.in());
-    String bodyCharset = Utils.parseCharset(body.mimeType());
-    String bodyString = new String(bodyBytes, bodyCharset);
-    for (int i = 0; i < bodyString.length(); i += LOG_CHUNK_SIZE) {
-      int end = Math.min(bodyString.length(), i + LOG_CHUNK_SIZE);
-      LOGGER.fine(bodyString.substring(i, end));
+    protected <T> void asyncExecute(final Request request, Callback<T> callback) {
+      httpExecutor.execute(new CallbackRunnable(callback, callbackExecutor) {
+        @Override public ResponseWrapper obtainResponse() {
+          return execute(request);
+        }
+      });
     }
 
-    LOGGER.fine("<--- END HTTP");
-
-    // Since we consumed the entire input stream, return a new, identical one from its bytes.
-    return new TypedByteArray(body.mimeType(), bodyBytes);
-  }
-
-  private static Profiler.RequestInformation getRequestInfo(Server server,
-      RestMethodInfo methodDetails, Request request) {
-    long contentLength = 0;
-    String contentType = null;
-
-    TypedOutput body = request.getBody();
-    if (body != null) {
-      contentLength = body.length();
-      contentType = body.mimeType();
+    protected static String urlEncode(Object value) {
+      String string = String.valueOf(value);
+      try {
+        return URLEncoder.encode(string, "UTF-8");
+      } catch (UnsupportedEncodingException e) {
+        throw new RuntimeException("Unable to URL encode: " + string);
+      }
     }
-
-    return new Profiler.RequestInformation(methodDetails.restMethod.value(), server.getUrl(),
-        methodDetails.path, contentLength, contentType);
   }
 
   /**

@@ -4,12 +4,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 import static java.lang.annotation.ElementType.METHOD;
-import static java.lang.annotation.RetentionPolicy.RUNTIME;
+import static java.lang.annotation.RetentionPolicy.CLASS;
 
 /** Make a PUT request to a REST path relative to base URL. */
 @Target(METHOD)
-@Retention(RUNTIME)
-@RestMethod(value = "PUT", hasBody = true)
+@Retention(CLASS)
 public @interface PUT {
   String value();
 }
