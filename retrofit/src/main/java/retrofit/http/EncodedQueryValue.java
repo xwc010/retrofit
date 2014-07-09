@@ -23,25 +23,16 @@ import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
- * Query parameter keys and values appended to the URL.
+ * Encoded key-less query parameter appended to the URL.
  * <p>
- * Both keys and values are converted to strings using {@link String#valueOf(Object)}. Values are
- * URL encoded and {@code null} will not include the query parameter in the URL.
- * <p>
- * Simple Example:
- * <pre>
- * &#64;GET("/search")
- * void list(@QueryMap Map&lt;String, String&gt; filters);
- * </pre>
- * Calling with {@code foo.list(ImmutableMap.of("foo", "bar", "kit", "kat"))} yields
- * {@code /search?foo=bar&kit=kat}.
+ * Values are converted to strings using {@link String#valueOf(Object)} and then URL encoded.
+ * {@code null} values are ignored. Passing a {@link java.util.List List} or array will result in a
+ * query parameter for each non-{@code null} item.
  *
- * @see EncodedQueryMap
- * @see Query
  * @see QueryValue
  */
 @Documented
 @Target(PARAMETER)
 @Retention(RUNTIME)
-public @interface QueryMap {
+public @interface EncodedQueryValue {
 }

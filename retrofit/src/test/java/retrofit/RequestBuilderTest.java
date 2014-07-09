@@ -29,6 +29,7 @@ import static retrofit.RestMethodInfo.ParamUsage.BODY;
 import static retrofit.RestMethodInfo.ParamUsage.ENCODED_PATH;
 import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY;
 import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY_MAP;
+import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY_VALUE;
 import static retrofit.RestMethodInfo.ParamUsage.FIELD;
 import static retrofit.RestMethodInfo.ParamUsage.FIELD_MAP;
 import static retrofit.RestMethodInfo.ParamUsage.HEADER;
@@ -37,6 +38,7 @@ import static retrofit.RestMethodInfo.ParamUsage.PART_MAP;
 import static retrofit.RestMethodInfo.ParamUsage.PATH;
 import static retrofit.RestMethodInfo.ParamUsage.QUERY;
 import static retrofit.RestMethodInfo.ParamUsage.QUERY_MAP;
+import static retrofit.RestMethodInfo.ParamUsage.QUERY_VALUE;
 import static retrofit.RestMethodInfo.RequestType;
 
 public class RequestBuilderTest {
@@ -383,6 +385,32 @@ public class RequestBuilderTest {
     assertThat(request.getMethod()).isEqualTo("GET");
     assertThat(request.getHeaders()).isEmpty();
     assertThat(request.getUrl()).isEqualTo("http://example.com/foo/bar/?kit=k%20t&ping=p%20g");
+    assertThat(request.getBody()).isNull();
+  }
+
+  @Test public void getWithQueryValueParam() throws Exception {
+    Request request = new Helper() //
+        .setMethod("GET") //
+        .setUrl("http://example.com") //
+        .setPath("/foo/bar/") //
+        .addQueryValueParam("pong") //
+        .build();
+    assertThat(request.getMethod()).isEqualTo("GET");
+    assertThat(request.getHeaders()).isEmpty();
+    assertThat(request.getUrl()).isEqualTo("http://example.com/foo/bar/?pong");
+    assertThat(request.getBody()).isNull();
+  }
+
+  @Test public void getWithEncodedQueryValueParam() throws Exception {
+    Request request = new Helper() //
+        .setMethod("GET") //
+        .setUrl("http://example.com") //
+        .setPath("/foo/bar/") //
+        .addEncodedQueryValueParam("p+o+n+g") //
+        .build();
+    assertThat(request.getMethod()).isEqualTo("GET");
+    assertThat(request.getHeaders()).isEmpty();
+    assertThat(request.getUrl()).isEqualTo("http://example.com/foo/bar/?p+o+n+g");
     assertThat(request.getBody()).isNull();
   }
 
@@ -858,6 +886,20 @@ public class RequestBuilderTest {
     Helper addEncodedQueryParam(String name, String value) {
       paramNames.add(name);
       paramUsages.add(ENCODED_QUERY);
+      args.add(value);
+      return this;
+    }
+
+    Helper addQueryValueParam(Object value) {
+      paramNames.add(null);
+      paramUsages.add(QUERY_VALUE);
+      args.add(value);
+      return this;
+    }
+
+    Helper addEncodedQueryValueParam(String value) {
+      paramNames.add(null);
+      paramUsages.add(ENCODED_QUERY_VALUE);
       args.add(value);
       return this;
     }

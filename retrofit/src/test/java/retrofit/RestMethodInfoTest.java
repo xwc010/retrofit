@@ -17,6 +17,7 @@ import retrofit.http.DELETE;
 import retrofit.http.EncodedPath;
 import retrofit.http.EncodedQuery;
 import retrofit.http.EncodedQueryMap;
+import retrofit.http.EncodedQueryValue;
 import retrofit.http.Field;
 import retrofit.http.FieldMap;
 import retrofit.http.FormUrlEncoded;
@@ -33,6 +34,7 @@ import retrofit.http.PartMap;
 import retrofit.http.Path;
 import retrofit.http.Query;
 import retrofit.http.QueryMap;
+import retrofit.http.QueryValue;
 import retrofit.http.RestMethod;
 import retrofit.http.Streaming;
 import retrofit.mime.TypedOutput;
@@ -46,12 +48,14 @@ import static retrofit.RestMethodInfo.ParamUsage.BODY;
 import static retrofit.RestMethodInfo.ParamUsage.ENCODED_PATH;
 import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY;
 import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY_MAP;
+import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY_VALUE;
 import static retrofit.RestMethodInfo.ParamUsage.FIELD;
 import static retrofit.RestMethodInfo.ParamUsage.FIELD_MAP;
 import static retrofit.RestMethodInfo.ParamUsage.HEADER;
 import static retrofit.RestMethodInfo.ParamUsage.PATH;
 import static retrofit.RestMethodInfo.ParamUsage.QUERY;
 import static retrofit.RestMethodInfo.ParamUsage.QUERY_MAP;
+import static retrofit.RestMethodInfo.ParamUsage.QUERY_VALUE;
 import static retrofit.RestMethodInfo.RequestType.FORM_URL_ENCODED;
 import static retrofit.RestMethodInfo.RequestType.MULTIPART;
 import static retrofit.RestMethodInfo.RequestType.SIMPLE;
@@ -676,6 +680,38 @@ public class RestMethodInfoTest {
 
     assertThat(methodInfo.requestParamNames).hasSize(1).containsExactly("a");
     assertThat(methodInfo.requestParamUsage).hasSize(1).containsExactly(ENCODED_QUERY);
+    assertThat(methodInfo.requestType).isEqualTo(SIMPLE);
+  }
+
+  @Test public void singleQueryValueParam() {
+    class Example {
+      @GET("/") Response a(@QueryValue String a) {
+        return null;
+      }
+    }
+
+    Method method = TestingUtils.getMethod(Example.class, "a");
+    RestMethodInfo methodInfo = new RestMethodInfo(method);
+    methodInfo.init();
+
+    assertThat(methodInfo.requestParamNames).hasSize(1).containsNull();
+    assertThat(methodInfo.requestParamUsage).hasSize(1).containsExactly(QUERY_VALUE);
+    assertThat(methodInfo.requestType).isEqualTo(SIMPLE);
+  }
+
+  @Test public void singleEncodedQueryValueParam() {
+    class Example {
+      @GET("/") Response a(@EncodedQueryValue String a) {
+        return null;
+      }
+    }
+
+    Method method = TestingUtils.getMethod(Example.class, "a");
+    RestMethodInfo methodInfo = new RestMethodInfo(method);
+    methodInfo.init();
+
+    assertThat(methodInfo.requestParamNames).hasSize(1).containsNull();
+    assertThat(methodInfo.requestParamUsage).hasSize(1).containsExactly(ENCODED_QUERY_VALUE);
     assertThat(methodInfo.requestType).isEqualTo(SIMPLE);
   }
 

@@ -29,9 +29,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * not URL encoded. {@code null} values will not include the query parameter in the URL. See
  * {@link QueryMap @QueryMap} for URL-encoding equivalent.
  *
- * @see Query
  * @see QueryMap
- * @see EncodedQuery
  */
 @Documented
 @Target(PARAMETER)

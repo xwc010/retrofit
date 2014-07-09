@@ -30,8 +30,6 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  * {@link Query @Query} for URL-encoding equivalent.
  *
  * @see Query
- * @see QueryMap
- * @see EncodedQueryMap
  */
 @Documented
 @Target(PARAMETER)

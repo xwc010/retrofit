@@ -23,25 +23,40 @@ import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
- * Query parameter keys and values appended to the URL.
+ * Key-less query parameter appended to the URL.
  * <p>
- * Both keys and values are converted to strings using {@link String#valueOf(Object)}. Values are
- * URL encoded and {@code null} will not include the query parameter in the URL.
+ * Values are converted to strings using {@link String#valueOf(Object)} and then URL encoded.
+ * {@code null} values are ignored. Passing a {@link java.util.List List} or array will result in a
+ * query parameter for each non-{@code null} item.
  * <p>
  * Simple Example:
  * <pre>
- * &#64;GET("/search")
- * void list(@QueryMap Map&lt;String, String&gt; filters);
+ * &#64;GET("/list")
+ * void list(@QueryValue int page);
  * </pre>
- * Calling with {@code foo.list(ImmutableMap.of("foo", "bar", "kit", "kat"))} yields
- * {@code /search?foo=bar&kit=kat}.
+ * Calling with {@code foo.list(24)} yields {@code /list?24}.
+ * <p>
+ * Example with {@code null}:
+ * <pre>
+ * &#64;GET("/list")
+ * void list(@QueryValue String category);
+ * </pre>
+ * Calling with {@code foo.list(null)} yields {@code /list}.
+ * <p>
+ * Array Example:
+ * <pre>
+ * &#64;GET("/list")
+ * void list(@QueryValue String... categories);
+ * </pre>
+ * Calling with {@code foo.list("bar", "baz")} yields
+ * {@code /list?foo&bar}.
  *
- * @see EncodedQueryMap
+ * @see EncodedQueryValue
  * @see Query
- * @see QueryValue
+ * @see QueryMap
  */
 @Documented
 @Target(PARAMETER)
 @Retention(RUNTIME)
-public @interface QueryMap {
+public @interface QueryValue {
 }

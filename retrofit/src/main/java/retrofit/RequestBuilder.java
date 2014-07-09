@@ -32,8 +32,10 @@ import retrofit.mime.MultipartTypedOutput;
 import retrofit.mime.TypedOutput;
 import retrofit.mime.TypedString;
 
+import static retrofit.RestMethodInfo.ParamUsage.ENCODED_QUERY_VALUE;
 import static retrofit.RestMethodInfo.ParamUsage.QUERY;
 import static retrofit.RestMethodInfo.ParamUsage.QUERY_MAP;
+import static retrofit.RestMethodInfo.ParamUsage.QUERY_VALUE;
 
 final class RequestBuilder implements RequestInterceptor.RequestFacade {
   private final Converter converter;
@@ -146,35 +148,40 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
   }
 
   @Override public void addQueryParam(String name, String value) {
-    addQueryParam(name, value, true);
+    addQueryParam(name, value, true, false);
   }
 
   @Override public void addEncodedQueryParam(String name, String value) {
-    addQueryParam(name, value, false);
+    addQueryParam(name, value, false, false);
   }
 
-  private void addQueryParam(String name, String value, boolean urlEncodeValue) {
-    if (name == null) {
-      throw new IllegalArgumentException("Query param name must not be null.");
+  private void addQueryParam(String name, String value, boolean urlEncodeValue, boolean valueOnly) {
+    if (name == null && !valueOnly) {
+      throw new IllegalArgumentException("Query parameter name must not be null.");
     }
     if (value == null) {
-      throw new IllegalArgumentException("Query param \"" + name + "\" value must not be null.");
+      String it = valueOnly ? "value parameter" : "parameter \"" + name + "\" value";
+      throw new IllegalArgumentException("Query " + it + " must not be null.");
     }
     try {
       if (urlEncodeValue) {
         value = URLEncoder.encode(String.valueOf(value), "UTF-8");
       }
-      StringBuilder queryParams = this.queryParams;
-      if (queryParams == null) {
-        this.queryParams = queryParams = new StringBuilder();
-      }
-
-      queryParams.append(queryParams.length() > 0 ? '&' : '?');
-      queryParams.append(name).append('=').append(value);
     } catch (UnsupportedEncodingException e) {
-      throw new RuntimeException(
-          "Unable to convert query parameter \"" + name + "\" value to UTF-8: " + value, e);
+      String it = valueOnly ? "value parameter" : "parameter \"" + name + "\" value";
+      throw new RuntimeException("Unable to convert query " + it + " to UTF-8: " + value, e);
     }
+
+    StringBuilder queryParams = this.queryParams;
+    if (queryParams == null) {
+      this.queryParams = queryParams = new StringBuilder();
+    }
+
+    queryParams.append(queryParams.length() > 0 ? '&' : '?');
+    if (!valueOnly) {
+      queryParams.append(name).append('=');
+    }
+    queryParams.append(value);
   }
 
   void setArguments(Object[] args) {
@@ -206,34 +213,37 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
           break;
         case QUERY:
         case ENCODED_QUERY:
+        case QUERY_VALUE:
+        case ENCODED_QUERY_VALUE:
           if (value != null) { // Skip null values.
-            boolean urlEncodeValue = paramUsage == QUERY;
+            boolean encodeValue = paramUsage == QUERY || paramUsage == QUERY_VALUE;
+            boolean valueOnly = paramUsage == QUERY_VALUE || paramUsage == ENCODED_QUERY_VALUE;
             if (value instanceof Iterable) {
               for (Object iterableValue : (Iterable<?>) value) {
                 if (iterableValue != null) { // Skip null values
-                  addQueryParam(name, iterableValue.toString(), urlEncodeValue);
+                  addQueryParam(name, iterableValue.toString(), encodeValue, valueOnly);
                 }
               }
             } else if (value.getClass().isArray()) {
               for (int x = 0, arrayLength = Array.getLength(value); x < arrayLength; x++) {
                 Object arrayValue = Array.get(value, x);
                 if (arrayValue != null) { // Skip null values
-                  addQueryParam(name, arrayValue.toString(), urlEncodeValue);
+                  addQueryParam(name, arrayValue.toString(), encodeValue, valueOnly);
                 }
               }
             } else {
-              addQueryParam(name, value.toString(), urlEncodeValue);
+              addQueryParam(name, value.toString(), encodeValue, valueOnly);
             }
           }
           break;
         case QUERY_MAP:
         case ENCODED_QUERY_MAP:
           if (value != null) { // Skip null values.
-            boolean urlEncodeValue = paramUsage == QUERY_MAP;
+            boolean encodeValue = paramUsage == QUERY_MAP;
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
               Object entryValue = entry.getValue();
               if (entryValue != null) { // Skip null values.
-                addQueryParam(entry.getKey().toString(), entryValue.toString(), urlEncodeValue);
+                addQueryParam(entry.getKey().toString(), entryValue.toString(), encodeValue, false);
               }
             }
           }

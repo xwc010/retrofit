@@ -32,6 +32,7 @@ import retrofit.http.Body;
 import retrofit.http.EncodedPath;
 import retrofit.http.EncodedQuery;
 import retrofit.http.EncodedQueryMap;
+import retrofit.http.EncodedQueryValue;
 import retrofit.http.Field;
 import retrofit.http.FieldMap;
 import retrofit.http.FormUrlEncoded;
@@ -43,8 +44,9 @@ import retrofit.http.PartMap;
 import retrofit.http.Path;
 import retrofit.http.Query;
 import retrofit.http.QueryMap;
-import retrofit.http.Streaming;
+import retrofit.http.QueryValue;
 import retrofit.http.RestMethod;
+import retrofit.http.Streaming;
 import rx.Observable;
 
 /** Request metadata about a service interface declaration. */
@@ -68,6 +70,8 @@ final class RestMethodInfo {
     ENCODED_QUERY,
     QUERY_MAP,
     ENCODED_QUERY_MAP,
+    QUERY_VALUE,
+    ENCODED_QUERY_VALUE,
     FIELD,
     FIELD_MAP,
     PART,
@@ -369,6 +373,12 @@ final class RestMethodInfo {
 
             paramNames[i] = name;
             paramUsage[i] = ParamUsage.ENCODED_QUERY;
+          } else if (annotationType == QueryValue.class) {
+            paramNames[i] = null;
+            paramUsage[i] = ParamUsage.QUERY_VALUE;
+          } else if (annotationType == EncodedQueryValue.class) {
+            paramNames[i] = null;
+            paramUsage[i] = ParamUsage.ENCODED_QUERY_VALUE;
           } else if (annotationType == QueryMap.class) {
             if (!Map.class.isAssignableFrom(parameterType)) {
               throw parameterError(i, "@QueryMap parameter type must be Map.");

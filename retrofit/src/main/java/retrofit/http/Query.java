@@ -53,7 +53,7 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
  *
  * @see EncodedQuery
  * @see QueryMap
- * @see EncodedQueryMap
+ * @see QueryValue
  */
 @Documented
 @Target(PARAMETER)
