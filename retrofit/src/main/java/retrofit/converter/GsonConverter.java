@@ -17,14 +17,14 @@ package retrofit.converter;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.ResponseBody;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
+import java.io.Reader;
 import java.lang.reflect.Type;
-import retrofit.mime.MimeUtil;
-import retrofit.mime.TypedInput;
-import retrofit.mime.TypedOutput;
+import java.nio.charset.Charset;
+import okio.BufferedSink;
 
 /**
  * A {@link Converter} which uses GSON for serialization and deserialization of entities.
@@ -33,7 +33,7 @@ import retrofit.mime.TypedOutput;
  */
 public class GsonConverter implements Converter {
   private final Gson gson;
-  private String charset;
+  private Charset charset;
 
   /**
    * Create an instance using the supplied {@link Gson} object for conversion. Encoding to JSON and
@@ -49,63 +49,41 @@ public class GsonConverter implements Converter {
    */
   public GsonConverter(Gson gson, String charset) {
     this.gson = gson;
-    this.charset = charset;
+    this.charset = Charset.forName(charset);
   }
 
-  @Override public Object fromBody(TypedInput body, Type type) throws ConversionException {
-    String charset = this.charset;
-    if (body.mimeType() != null) {
-      charset = MimeUtil.parseCharset(body.mimeType(), charset);
-    }
-    InputStreamReader isr = null;
+  @Override public Object fromBody(ResponseBody body, Type type) throws ConversionException {
+    Reader reader = null;
     try {
-      isr = new InputStreamReader(body.in(), charset);
-      return gson.fromJson(isr, type);
-    } catch (IOException e) {
-      throw new ConversionException(e);
+      reader = body.charStream();
+      return gson.fromJson(reader, type);
     } catch (JsonParseException e) {
       throw new ConversionException(e);
     } finally {
-      if (isr != null) {
+      if (reader != null) {
         try {
-          isr.close();
+          reader.close();
         } catch (IOException ignored) {
         }
       }
     }
   }
 
-  @Override public TypedOutput toBody(Object object) {
-    try {
-      return new JsonTypedOutput(gson.toJson(object).getBytes(charset), charset);
-    } catch (UnsupportedEncodingException e) {
-      throw new AssertionError(e);
-    }
-  }
+  @Override public RequestBody toBody(Object object) {
+    final byte[] bytes = gson.toJson(object).getBytes(charset);
+    final MediaType contentType = MediaType.parse("application/json; charset=" + charset);
+    return new RequestBody() {
+      @Override public MediaType contentType() {
+        return contentType;
+      }
 
-  private static class JsonTypedOutput implements TypedOutput {
-    private final byte[] jsonBytes;
-    private final String mimeType;
+      @Override public long contentLength() {
+        return bytes.length;
+      }
 
-    JsonTypedOutput(byte[] jsonBytes, String encode) {
-      this.jsonBytes = jsonBytes;
-      this.mimeType = "application/json; charset=" + encode;
-    }
-
-    @Override public String fileName() {
-      return null;
-    }
-
-    @Override public String mimeType() {
-      return mimeType;
-    }
-
-    @Override public long length() {
-      return jsonBytes.length;
-    }
-
-    @Override public void writeTo(OutputStream out) throws IOException {
-      out.write(jsonBytes);
-    }
+      @Override public void writeTo(BufferedSink sink) throws IOException {
+        sink.write(bytes);
+      }
+    };
   }
 }

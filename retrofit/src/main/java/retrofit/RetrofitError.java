@@ -15,12 +15,12 @@
  */
 package retrofit;
 
+import com.squareup.okhttp.Response;
+import com.squareup.okhttp.ResponseBody;
 import java.io.IOException;
 import java.lang.reflect.Type;
-import retrofit.client.Response;
 import retrofit.converter.ConversionException;
 import retrofit.converter.Converter;
-import retrofit.mime.TypedInput;
 
 public class RetrofitError extends RuntimeException {
   public static RetrofitError networkError(String url, IOException exception) {
@@ -36,7 +36,7 @@ public class RetrofitError extends RuntimeException {
 
   public static RetrofitError httpError(String url, Response response, Converter converter,
       Type successType) {
-    String message = response.getStatus() + " " + response.getReason();
+    String message = response.code() + " " + response.message();
     return new RetrofitError(message, url, response, converter, successType, Kind.HTTP, null);
   }
 
@@ -120,7 +120,7 @@ public class RetrofitError extends RuntimeException {
     if (response == null) {
       return null;
     }
-    TypedInput body = response.getBody();
+    ResponseBody body = response.body();
     if (body == null) {
       return null;
     }

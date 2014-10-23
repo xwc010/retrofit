@@ -15,9 +15,9 @@
  */
 package retrofit.converter;
 
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.ResponseBody;
 import java.lang.reflect.Type;
-import retrofit.mime.TypedInput;
-import retrofit.mime.TypedOutput;
 
 /**
  * Arbiter for converting objects to and from their representation in HTTP.
@@ -36,7 +36,7 @@ public interface Converter {
    * {@link retrofit.RetrofitError}. The exception message should report all necessary information
    * about its cause as the response body will be set to {@code null}.
    */
-  Object fromBody(TypedInput body, Type type) throws ConversionException;
+  Object fromBody(ResponseBody body, Type type) throws ConversionException;
 
   /**
    * Convert an object to an appropriate representation for HTTP transport.
@@ -44,5 +44,5 @@ public interface Converter {
    * @param object Object instance to convert.
    * @return Representation of the specified object as bytes.
    */
-  TypedOutput toBody(Object object);
+  RequestBody toBody(Object object);
 }

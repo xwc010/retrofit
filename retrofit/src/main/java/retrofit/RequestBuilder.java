@@ -15,18 +15,19 @@
  */
 package retrofit;
 
+import com.squareup.okhttp.FormEncodingBuilder;
+import com.squareup.okhttp.Headers;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.MultipartBuilder;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import retrofit.client.Header;
-import retrofit.client.Request;
+import okio.BufferedSink;
 import retrofit.converter.Converter;
 import retrofit.http.Body;
 import retrofit.http.Field;
@@ -36,10 +37,6 @@ import retrofit.http.PartMap;
 import retrofit.http.Path;
 import retrofit.http.Query;
 import retrofit.http.QueryMap;
-import retrofit.mime.FormUrlEncodedTypedOutput;
-import retrofit.mime.MultipartTypedOutput;
-import retrofit.mime.TypedOutput;
-import retrofit.mime.TypedString;
 
 final class RequestBuilder implements RequestInterceptor.RequestFacade {
   private final Converter converter;
@@ -49,13 +46,13 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
   private final boolean isObservable;
   private final String apiUrl;
 
-  private final FormUrlEncodedTypedOutput formBody;
-  private final MultipartTypedOutput multipartBody;
-  private TypedOutput body;
+  private final FormEncodingBuilder formBuilder;
+  private final MultipartBuilder multipartBuilder;
+  private RequestBody body;
 
   private String relativeUrl;
   private StringBuilder queryParams;
-  private List<Header> headers;
+  private Headers.Builder headers;
   private String contentTypeHeader;
 
   RequestBuilder(String apiUrl, RestMethodInfo methodInfo, Converter converter) {
@@ -68,7 +65,7 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
     isObservable = methodInfo.isObservable;
 
     if (methodInfo.headers != null) {
-      headers = new ArrayList<Header>(methodInfo.headers);
+      headers = methodInfo.headers.newBuilder();
     }
     contentTypeHeader = methodInfo.contentTypeHeader;
 
@@ -81,18 +78,18 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
 
     switch (methodInfo.requestType) {
       case FORM_URL_ENCODED:
-        formBody = new FormUrlEncodedTypedOutput();
-        multipartBody = null;
-        body = formBody;
+        formBuilder = new FormEncodingBuilder();
+        multipartBuilder = null;
+        body = null;
         break;
       case MULTIPART:
-        formBody = null;
-        multipartBody = new MultipartTypedOutput();
-        body = multipartBody;
+        formBuilder = null;
+        multipartBuilder = new MultipartBuilder();
+        body = null;
         break;
       case SIMPLE:
-        formBody = null;
-        multipartBody = null;
+        formBuilder = null;
+        multipartBuilder = null;
         // If present, 'body' will be set in 'setArguments' call.
         break;
       default:
@@ -109,11 +106,11 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
       return;
     }
 
-    List<Header> headers = this.headers;
+    Headers.Builder headers = this.headers;
     if (headers == null) {
-      this.headers = headers = new ArrayList<Header>(2);
+      this.headers = headers = new Headers.Builder();
     }
-    headers.add(new Header(name, value));
+    headers.add(name, value);
   }
 
   @Override public void addPathParam(String name, String value) {
@@ -275,29 +272,45 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
           Field field = (Field) annotation;
           String name = field.value();
           boolean encodeName = field.encodeName();
+          if (!encodeName) {
+            // TODO https://github.com/square/okhttp/issues/1215
+            throw new UnsupportedOperationException("Not supported.");
+          }
           boolean encodeValue = field.encodeValue();
+          if (!encodeValue) {
+            // TODO https://github.com/square/okhttp/issues/1215
+            throw new UnsupportedOperationException("Not supported.");
+          }
           if (value instanceof Iterable) {
             for (Object iterableValue : (Iterable<?>) value) {
               if (iterableValue != null) { // Skip null values.
-                formBody.addField(name, encodeName, iterableValue.toString(), encodeValue);
+                formBuilder.add(name, iterableValue.toString());
               }
             }
           } else if (value.getClass().isArray()) {
             for (int x = 0, arrayLength = Array.getLength(value); x < arrayLength; x++) {
               Object arrayValue = Array.get(value, x);
               if (arrayValue != null) { // Skip null values.
-                formBody.addField(name, encodeName, arrayValue.toString(), encodeValue);
+                formBuilder.add(name, arrayValue.toString());
               }
             }
           } else {
-            formBody.addField(name, encodeName, value.toString(), encodeValue);
+            formBuilder.add(name, value.toString());
           }
         }
       } else if (annotationType == FieldMap.class) {
         if (value != null) { // Skip null values.
           FieldMap fieldMap = (FieldMap) annotation;
           boolean encodeNames = fieldMap.encodeNames();
+          if (!encodeNames) {
+            // TODO https://github.com/square/okhttp/issues/1215
+            throw new UnsupportedOperationException("Not supported.");
+          }
           boolean encodeValues = fieldMap.encodeValues();
+          if (!encodeValues) {
+            // TODO https://github.com/square/okhttp/issues/1215
+            throw new UnsupportedOperationException("Not supported.");
+          }
           for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
             Object entryKey = entry.getKey();
             if (entryKey == null) {
@@ -306,21 +319,26 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
             }
             Object entryValue = entry.getValue();
             if (entryValue != null) { // Skip null values.
-              formBody.addField(entryKey.toString(), encodeNames, entryValue.toString(),
-                  encodeValues);
+              formBuilder.add(entryKey.toString(), entryValue.toString());
             }
           }
         }
       } else if (annotationType == Part.class) {
         if (value != null) { // Skip null values.
+          Headers.Builder headers = new Headers.Builder();
+
           String name = ((Part) annotation).value();
-          String transferEncoding = ((Part) annotation).encoding();
-          if (value instanceof TypedOutput) {
-            multipartBody.addPart(name, transferEncoding, (TypedOutput) value);
-          } else if (value instanceof String) {
-            multipartBody.addPart(name, transferEncoding, new TypedString((String) value));
+          headers.add("Content-Disposition", "form-data; name=\"" + name + '"');
+
+          String transferEncoding = ((Part) annotation).encoding(); // TODO
+          if (!transferEncoding.isEmpty()) {
+            headers.add("Content-Transfer-Encoding", transferEncoding);
+          }
+
+          if (value instanceof RequestBody) {
+            multipartBuilder.addPart(headers.build(), (RequestBody) value);
           } else {
-            multipartBody.addPart(name, transferEncoding, converter.toBody(value));
+            multipartBuilder.addPart(headers.build(), converter.toBody(value));
           }
         }
       } else if (annotationType == PartMap.class) {
@@ -335,13 +353,15 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
             String entryName = entryKey.toString();
             Object entryValue = entry.getValue();
             if (entryValue != null) { // Skip null values.
-              if (entryValue instanceof TypedOutput) {
-                multipartBody.addPart(entryName, transferEncoding, (TypedOutput) entryValue);
-              } else if (entryValue instanceof String) {
-                multipartBody.addPart(entryName, transferEncoding,
-                    new TypedString((String) entryValue));
+              Headers.Builder headers = new Headers.Builder()
+                  .add("Content-Disposition", "form-data; name=\"" + entryName + '"');
+              if (!transferEncoding.isEmpty()) {
+                headers.add("Content-Transfer-Encoding", transferEncoding);
+              }
+              if (entryValue instanceof RequestBody) {
+                multipartBuilder.addPart(headers.build(), (RequestBody) entryValue);
               } else {
-                multipartBody.addPart(entryName, transferEncoding, converter.toBody(entryValue));
+                multipartBuilder.addPart(headers.build(), converter.toBody(entryValue));
               }
             }
           }
@@ -350,8 +370,8 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
         if (value == null) {
           throw new IllegalArgumentException("Body parameter value must not be null.");
         }
-        if (value instanceof TypedOutput) {
-          body = (TypedOutput) value;
+        if (value instanceof RequestBody) {
+          body = (RequestBody) value;
         } else {
           body = converter.toBody(value);
         }
@@ -363,8 +383,10 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
   }
 
   Request build() throws UnsupportedEncodingException {
-    if (multipartBody != null && multipartBody.getPartCount() == 0) {
-      throw new IllegalStateException("Multipart requests must contain at least one part.");
+    if (multipartBuilder != null) {
+      body = multipartBuilder.build();
+    } else if (formBuilder != null) {
+      body = formBuilder.build();
     }
 
     String apiUrl = this.apiUrl;
@@ -381,47 +403,46 @@ final class RequestBuilder implements RequestInterceptor.RequestFacade {
       url.append(queryParams);
     }
 
-    TypedOutput body = this.body;
-    List<Header> headers = this.headers;
+    RequestBody body = this.body;
+    Headers.Builder headers = this.headers;
     if (contentTypeHeader != null) {
       if (body != null) {
-        body = new MimeOverridingTypedOutput(body, contentTypeHeader);
+        body = new MimeOverridingRequestBody(body, contentTypeHeader);
       } else {
-        Header header = new Header("Content-Type", contentTypeHeader);
         if (headers == null) {
-          headers = Collections.singletonList(header);
+          headers = new Headers.Builder().add("Content-Type", contentTypeHeader);
         } else {
-          headers.add(header);
+          headers.add("Content-Type", contentTypeHeader);
         }
       }
     }
 
-    return new Request(requestMethod, url.toString(), headers, body);
+    Request.Builder builder = new Request.Builder().url(url.toString()).method(requestMethod, body);
+    if (headers != null) {
+      builder.headers(headers.build());
+    }
+    return builder.build();
   }
 
-  private static class MimeOverridingTypedOutput implements TypedOutput {
-    private final TypedOutput delegate;
-    private final String mimeType;
+  private static class MimeOverridingRequestBody extends RequestBody {
+    private final RequestBody delegate;
+    private final MediaType mediaType;
 
-    MimeOverridingTypedOutput(TypedOutput delegate, String mimeType) {
+    MimeOverridingRequestBody(RequestBody delegate, String mediaType) {
       this.delegate = delegate;
-      this.mimeType = mimeType;
+      this.mediaType = MediaType.parse(mediaType);
     }
 
-    @Override public String fileName() {
-      return delegate.fileName();
+    @Override public MediaType contentType() {
+      return mediaType;
     }
 
-    @Override public String mimeType() {
-      return mimeType;
+    @Override public long contentLength() throws IOException {
+      return delegate.contentLength();
     }
 
-    @Override public long length() {
-      return delegate.length();
-    }
-
-    @Override public void writeTo(OutputStream out) throws IOException {
-      delegate.writeTo(out);
+    @Override public void writeTo(BufferedSink sink) throws IOException {
+      delegate.writeTo(sink);
     }
   }
 }

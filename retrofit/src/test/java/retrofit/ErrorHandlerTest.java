@@ -1,14 +1,12 @@
 // Copyright 2013 Square, Inc.
 package retrofit;
 
-import java.io.IOException;
-import java.util.Collections;
+import com.squareup.okhttp.Response;
+import com.squareup.okhttp.mockwebserver.MockResponse;
+import com.squareup.okhttp.mockwebserver.rule.MockWebServerRule;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
-import retrofit.client.Client;
-import retrofit.client.Header;
-import retrofit.client.Request;
-import retrofit.client.Response;
 import retrofit.http.GET;
 import rx.Observable;
 import rx.Observer;
@@ -36,12 +34,7 @@ public class ErrorHandlerTest {
   static class TestException extends Exception {
   }
 
-  /* An HTTP client which always returns a 400 response */
-  static class MockInvalidResponseClient implements Client {
-    @Override public Response execute(Request request) throws IOException {
-      return new Response("", 400, "invalid request", Collections.<Header>emptyList(), null);
-    }
-  }
+  @Rule public MockWebServerRule mockWebServer = new MockWebServerRule();
 
   ExampleClient client;
   ErrorHandler errorHandler;
@@ -49,9 +42,10 @@ public class ErrorHandlerTest {
   @Before public void setup() {
     errorHandler = mock(ErrorHandler.class);
 
+    mockWebServer.enqueue(new MockResponse().setResponseCode(400));
+
     client = new RestAdapter.Builder() //
-        .setEndpoint("http://example.com")
-        .setClient(new MockInvalidResponseClient())
+        .setEndpoint(mockWebServer.getUrl("/").toString())
         .setErrorHandler(errorHandler)
         .setExecutors(new Utils.SynchronousExecutor(), new Utils.SynchronousExecutor())
         .build()

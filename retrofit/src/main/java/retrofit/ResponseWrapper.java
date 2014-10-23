@@ -15,7 +15,7 @@
  */
 package retrofit;
 
-import retrofit.client.Response;
+import com.squareup.okhttp.Response;
 
 /**
  * A wrapper that holds the {@link Response} and {@link retrofit.converter.Converter} response to

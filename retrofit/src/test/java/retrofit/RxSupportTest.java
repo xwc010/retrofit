@@ -1,7 +1,8 @@
 package retrofit;
 
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.Response;
 import java.util.ArrayDeque;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.concurrent.Executor;
@@ -10,16 +11,13 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import retrofit.client.Header;
-import retrofit.client.Response;
-import retrofit.mime.TypedInput;
 import rx.Observer;
 import rx.Subscription;
 import rx.schedulers.Schedulers;
 import rx.schedulers.TestScheduler;
 
+import static com.squareup.okhttp.Protocol.HTTP_1_1;
 import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -50,12 +48,14 @@ public class RxSupportTest {
   @Before public void setUp() {
     MockitoAnnotations.initMocks(this);
     response = new Object();
-    responseWrapper = new ResponseWrapper(
-            new Response(
-                    "http://example.com", 200, "Success",
-                    Collections.<Header>emptyList(), mock(TypedInput.class)
-            ), response
-    );
+    responseWrapper = new ResponseWrapper(new Response.Builder()
+        .request(new Request.Builder()
+            .url("/")
+            .build())
+        .protocol(HTTP_1_1)
+        .code(200)
+        .message("Success")
+        .build(), response);
     executor = spy(new QueuedSynchronousExecutor());
     rxSupport = new RxSupport(executor, ErrorHandler.DEFAULT, requestInterceptor);
   }

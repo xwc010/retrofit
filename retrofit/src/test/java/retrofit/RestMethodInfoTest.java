@@ -2,13 +2,13 @@
 package retrofit;
 
 import com.google.gson.reflect.TypeToken;
+import com.squareup.okhttp.Response;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.Test;
-import retrofit.client.Response;
 import retrofit.http.GET;
 import retrofit.http.Query;
 import retrofit.http.Streaming;

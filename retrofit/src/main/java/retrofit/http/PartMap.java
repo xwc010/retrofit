@@ -15,21 +15,20 @@
  */
 package retrofit.http;
 
+import com.squareup.okhttp.RequestBody;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
 
 import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
-import static retrofit.mime.MultipartTypedOutput.DEFAULT_TRANSFER_ENCODING;
 
 /**
  * Denotes name and value parts of a multi-part request
  * <p>
  * Values of the map on which this annotation exists will be processed in one of three ways:
  * <ul>
- * <li>If the type implements {@link retrofit.mime.TypedOutput TypedOutput} the headers and
- * body will be used directly.</li>
+ * <li>If the type is a {@link RequestBody} then its headers and body will be used directly.</li>
  * <li>If the type is {@link String} the value will also be used directly with a {@code text/plain}
  * content type.</li>
  * <li>Other object types will be converted to an appropriate representation by calling {@link
@@ -51,5 +50,5 @@ import static retrofit.mime.MultipartTypedOutput.DEFAULT_TRANSFER_ENCODING;
 @Retention(RUNTIME)
 public @interface PartMap {
   /** The {@code Content-Transfer-Encoding} of this part. */
-  String encoding() default DEFAULT_TRANSFER_ENCODING;
+  String encoding() default "";
 }

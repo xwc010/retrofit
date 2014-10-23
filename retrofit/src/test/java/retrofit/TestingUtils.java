@@ -1,14 +1,11 @@
 // Copyright 2013 Square, Inc.
 package retrofit;
 
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.RequestBody;
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.util.Map;
-import retrofit.mime.MimeHelper;
-import retrofit.mime.MultipartTypedOutput;
-import retrofit.mime.TypedOutput;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import okio.BufferedSink;
 
 public final class TestingUtils {
   public static Method onlyMethod(Class c) {
@@ -19,15 +16,23 @@ public final class TestingUtils {
     throw new IllegalArgumentException("More than one method declared.");
   }
 
-  public static TypedOutput createMultipart(Map<String, TypedOutput> parts) {
-    MultipartTypedOutput typedOutput = MimeHelper.newMultipart("foobarbaz");
-    for (Map.Entry<String, TypedOutput> part : parts.entrySet()) {
-      typedOutput.addPart(part.getKey(), part.getValue());
-    }
-    return typedOutput;
-  }
+  static RequestBody stringBody(final String body) {
+    return new RequestBody() {
+      @Override public MediaType contentType() {
+        return MediaType.parse("text/plain; charset=UTF-8");
+      }
 
-  public static void assertBytes(byte[] bytes, String expected) throws IOException {
-    assertThat(new String(bytes, "UTF-8")).isEqualTo(expected);
+      @Override public long contentLength() {
+        return Character.codePointCount(body, 0, body.length());
+      }
+
+      @Override public void writeTo(BufferedSink sink) throws IOException {
+        sink.writeUtf8(body);
+      }
+
+      @Override public String toString() {
+        return "String[" + body + ']';
+      }
+    };
   }
 }

@@ -16,85 +16,65 @@
  */
 package retrofit;
 
-import java.io.ByteArrayOutputStream;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.Response;
+import com.squareup.okhttp.ResponseBody;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.concurrent.Executor;
-import retrofit.client.Request;
-import retrofit.client.Response;
-import retrofit.mime.TypedByteArray;
-import retrofit.mime.TypedInput;
-import retrofit.mime.TypedOutput;
+import okio.Buffer;
+import okio.BufferedSink;
+import okio.BufferedSource;
 
 final class Utils {
-  private static final int BUFFER_SIZE = 0x1000;
+  public static final Charset UTF8 = Charset.forName("UTF-8");
 
-  /**
-   * Creates a {@code byte[]} from reading the entirety of an {@link InputStream}. May return an
-   * empty array but never {@code null}.
-   * <p>
-   * Copied from Guava's {@code ByteStreams} class.
-   */
-  static byte[] streamToBytes(InputStream stream) throws IOException {
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    if (stream != null) {
-      byte[] buf = new byte[BUFFER_SIZE];
-      int r;
-      while ((r = stream.read(buf)) != -1) {
-        baos.write(buf, 0, r);
-      }
-    }
-    return baos.toByteArray();
-  }
-
-  /**
-   * Conditionally replace a {@link Request} with an identical copy whose body is backed by a
-   * byte[] rather than an input stream.
-   */
-  static Request readBodyToBytesIfNecessary(Request request) throws IOException {
-    TypedOutput body = request.getBody();
-    if (body == null || body instanceof TypedByteArray) {
+  static Request bufferBody(Request request, Buffer buffer) throws IOException {
+    final RequestBody body = request.body();
+    if (body == null) {
       return request;
     }
 
-    String bodyMime = body.mimeType();
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    body.writeTo(baos);
-    body = new TypedByteArray(bodyMime, baos.toByteArray());
+    body.writeTo(buffer);
 
-    return new Request(request.getMethod(), request.getUrl(), request.getHeaders(), body);
+    final Buffer clone = buffer.clone();
+    return request.newBuilder()
+        .method(request.method(), new RequestBody() {
+          @Override public MediaType contentType() {
+            return body.contentType();
+          }
+          @Override public long contentLength() throws IOException {
+            return body.contentLength();
+          }
+          @Override public void writeTo(BufferedSink sink) throws IOException {
+            sink.writeAll(clone);
+          }
+        })
+        .build();
   }
 
-  /**
-   * Conditionally replace a {@link Response} with an identical copy whose body is backed by a
-   * byte[] rather than an input stream.
-   */
-  static Response readBodyToBytesIfNecessary(Response response) throws IOException {
-    TypedInput body = response.getBody();
-    if (body == null || body instanceof TypedByteArray) {
+  static Response bufferBody(Response response, Buffer buffer) throws IOException {
+    final ResponseBody body = response.body();
+    if (body == null) {
       return response;
     }
 
-    String bodyMime = body.mimeType();
-    InputStream is = body.in();
-    try {
-      byte[] bodyBytes = Utils.streamToBytes(is);
-      body = new TypedByteArray(bodyMime, bodyBytes);
+    buffer.writeAll(body.source());
 
-      return replaceResponseBody(response, body);
-    } finally {
-      if (is != null) {
-        try {
-          is.close();
-        } catch (IOException ignored) {
-        }
+    final Buffer clone = buffer.clone();
+    return response.newBuilder().body(new ResponseBody() {
+      @Override public MediaType contentType() {
+        return body.contentType();
       }
-    }
-  }
-
-  static Response replaceResponseBody(Response response, TypedInput body) {
-    return new Response(response.getUrl(), response.getStatus(), response.getReason(),
-        response.getHeaders(), body);
+      @Override public long contentLength() {
+        return body.contentLength();
+      }
+      @Override public BufferedSource source() {
+        return clone.clone();
+      }
+    }).build();
   }
 
   static <T> void validateServiceClass(Class<T> service) {

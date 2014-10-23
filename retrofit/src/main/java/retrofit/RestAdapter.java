@@ -15,6 +15,13 @@
  */
 package retrofit;
 
+import com.squareup.okhttp.Headers;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
+import com.squareup.okhttp.Response;
+import com.squareup.okhttp.ResponseBody;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -26,16 +33,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import retrofit.client.Client;
-import retrofit.client.Header;
-import retrofit.client.Request;
-import retrofit.client.Response;
+import okio.Buffer;
 import retrofit.converter.ConversionException;
 import retrofit.converter.Converter;
-import retrofit.mime.MimeUtil;
-import retrofit.mime.TypedByteArray;
-import retrofit.mime.TypedInput;
-import retrofit.mime.TypedOutput;
 
 /**
  * Adapts a Java interface to a REST API.
@@ -71,7 +71,7 @@ import retrofit.mime.TypedOutput;
  * will be converted to request representation by a call to
  * {@link retrofit.converter.Converter#toBody(Object) toBody} on the supplied
  * {@link retrofit.converter.Converter Converter} for this instance. The body can also be a
- * {@link TypedOutput} where it will be used directly.
+ * {@link RequestBody} where it will be used directly.
  * <p>
  * Alternative request body formats are supported by method annotations and corresponding parameter
  * annotations:
@@ -84,7 +84,7 @@ import retrofit.mime.TypedOutput;
  * <p>
  * Additional static headers can be added for an endpoint using the
  * {@link retrofit.http.Headers @Headers} method annotation. For per-request control over a header
- * annotate a parameter with {@link Header @Header}.
+ * annotate a parameter with {@link retrofit.http.Header @Header}.
  * <p>
  * For example:
  * <pre>
@@ -152,12 +152,12 @@ public class RestAdapter {
   final Log log;
   final ErrorHandler errorHandler;
 
-  private final Client client;
+  private final OkHttpClient client;
   private RxSupport rxSupport;
 
   volatile LogLevel logLevel;
 
-  private RestAdapter(Endpoint server, Client client, Executor httpExecutor,
+  private RestAdapter(Endpoint server, OkHttpClient client, Executor httpExecutor,
       Executor callbackExecutor, RequestInterceptor requestInterceptor, Converter converter,
       ErrorHandler errorHandler, Log log, LogLevel logLevel) {
     this.server = server;
@@ -297,7 +297,7 @@ public class RestAdapter {
         requestInterceptor.intercept(requestBuilder);
 
         Request request = requestBuilder.build();
-        url = request.getUrl();
+        url = request.urlString();
 
         if (!methodInfo.isSynchronous) {
           // If we are executing asynchronously then update the current thread with a useful name.
@@ -315,7 +315,7 @@ public class RestAdapter {
         }
 
         long start = System.nanoTime();
-        Response response = client.execute(request);
+        Response response = client.newCall(request).execute();
         long elapsedTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
         if (logLevel.log()) {
@@ -325,13 +325,13 @@ public class RestAdapter {
 
         Type type = methodInfo.responseObjectType;
 
-        int statusCode = response.getStatus();
+        int statusCode = response.code();
         if (statusCode >= 200 && statusCode < 300) { // 2XX == successful request
           // Caller requested the raw Response object directly.
           if (type.equals(Response.class)) {
             if (!methodInfo.isStreaming) {
               // Read the entire stream and replace with one backed by a byte[].
-              response = Utils.readBodyToBytesIfNecessary(response);
+              response = Utils.bufferBody(response, new Buffer() /* TODO wasteful */);
             }
 
             if (methodInfo.isSynchronous) {
@@ -340,7 +340,7 @@ public class RestAdapter {
             return new ResponseWrapper(response, response);
           }
 
-          TypedInput body = response.getBody();
+          ResponseBody body = response.body();
           if (body == null) {
             if (methodInfo.isSynchronous) {
               return null;
@@ -348,10 +348,10 @@ public class RestAdapter {
             return new ResponseWrapper(response, null);
           }
 
-          ExceptionCatchingTypedInput wrapped = new ExceptionCatchingTypedInput(body);
+          ExceptionCatchingResponseBody wrapped = new ExceptionCatchingResponseBody(body);
           try {
             Object convert = converter.fromBody(wrapped, type);
-            logResponseBody(body, convert);
+            logResponseBody(convert);
             if (methodInfo.isSynchronous) {
               return convert;
             }
@@ -364,13 +364,13 @@ public class RestAdapter {
             }
 
             // The response body was partially read by the converter. Replace it with null.
-            response = Utils.replaceResponseBody(response, null);
+            response = response.newBuilder().body(null).build();
 
             throw RetrofitError.conversionError(url, response, converter, type, e);
           }
         }
 
-        response = Utils.readBodyToBytesIfNecessary(response);
+        response = Utils.bufferBody(response, new Buffer() /* TODO wasteful */);
         throw RetrofitError.httpError(url, response, converter, type);
       } catch (RetrofitError e) {
         throw e; // Pass through our own errors.
@@ -394,42 +394,38 @@ public class RestAdapter {
 
   /** Log request headers and body. Consumes request body and returns identical replacement. */
   Request logAndReplaceRequest(String name, Request request, Object[] args) throws IOException {
-    log.log(String.format("---> %s %s %s", name, request.getMethod(), request.getUrl()));
+    log.log(String.format("---> %s %s %s", name, request.method(), request.urlString()));
 
     if (logLevel.ordinal() >= LogLevel.HEADERS.ordinal()) {
-      for (Header header : request.getHeaders()) {
-        log.log(header.toString());
+      Headers headers = request.headers();
+      for (int i = 0, size = headers.size(); i < size; i++) {
+        log.log(headers.name(i) + ": " + headers.value(i));
       }
 
       String bodySize = "no";
-      TypedOutput body = request.getBody();
+      RequestBody body = request.body();
       if (body != null) {
-        String bodyMime = body.mimeType();
+        MediaType bodyMime = body.contentType();
         if (bodyMime != null) {
           log.log("Content-Type: " + bodyMime);
         }
 
-        long bodyLength = body.length();
+        long bodyLength = body.contentLength();
         bodySize = bodyLength + "-byte";
         if (bodyLength != -1) {
           log.log("Content-Length: " + bodyLength);
         }
 
         if (logLevel.ordinal() >= LogLevel.FULL.ordinal()) {
-          if (!request.getHeaders().isEmpty()) {
+          if (headers.size() > 0) {
             log.log("");
           }
-          if (!(body instanceof TypedByteArray)) {
-            // Read the entire response body to we can log it and replace the original response
-            request = Utils.readBodyToBytesIfNecessary(request);
-            body = request.getBody();
-          }
+          Buffer buffer = new Buffer();
+          request = Utils.bufferBody(request, buffer);
 
-          byte[] bodyBytes = ((TypedByteArray) body).getBytes();
-          String bodyCharset = MimeUtil.parseCharset(body.mimeType(), "UTF-8");
-          log.log(new String(bodyBytes, bodyCharset));
+          log.log(buffer.readUtf8());
         } else if (logLevel.ordinal() >= LogLevel.HEADERS_AND_ARGS.ordinal()) {
-          if (!request.getHeaders().isEmpty()) {
+          if (headers.size() > 0) {
             log.log("---> REQUEST:");
           }
           for (int i = 0; i < args.length; i++) {
@@ -447,34 +443,28 @@ public class RestAdapter {
   /** Log response headers and body. Consumes response body and returns identical replacement. */
   private Response logAndReplaceResponse(String url, Response response, long elapsedTime)
       throws IOException {
-    log.log(String.format("<--- HTTP %s %s (%sms)", response.getStatus(), url, elapsedTime));
+    log.log(String.format("<--- HTTP %s %s (%sms)", response.code(), url, elapsedTime));
 
     if (logLevel.ordinal() >= LogLevel.HEADERS.ordinal()) {
-      for (Header header : response.getHeaders()) {
-        log.log(header.toString());
+      Headers headers = response.headers();
+      for (int i = 0, size = headers.size(); i < size; i++) {
+        log.log(headers.name(i) + ": " + headers.value(i));
       }
 
       long bodySize = 0;
-      TypedInput body = response.getBody();
+      ResponseBody body = response.body();
       if (body != null) {
-        bodySize = body.length();
+        bodySize = body.contentLength();
 
         if (logLevel.ordinal() >= LogLevel.FULL.ordinal()) {
-          if (!response.getHeaders().isEmpty()) {
+          if (headers.size() > 0) {
             log.log("");
           }
 
-          if (!(body instanceof TypedByteArray)) {
-            // Read the entire response body so we can log it and replace the original response
-            response = Utils.readBodyToBytesIfNecessary(response);
-            body = response.getBody();
-          }
+          Buffer buffer = new Buffer();
+          response = Utils.bufferBody(response, buffer);
 
-          byte[] bodyBytes = ((TypedByteArray) body).getBytes();
-          bodySize = bodyBytes.length;
-          String bodyMime = body.mimeType();
-          String bodyCharset = MimeUtil.parseCharset(bodyMime, "UTF-8");
-          log.log(new String(bodyBytes, bodyCharset));
+          log.log(buffer.readString(response.body().contentType().charset(Utils.UTF8)));
         }
       }
 
@@ -484,10 +474,10 @@ public class RestAdapter {
     return response;
   }
 
-  private void logResponseBody(TypedInput body, Object convert) {
+  private void logResponseBody(Object convert) {
     if (logLevel.ordinal() == LogLevel.HEADERS_AND_ARGS.ordinal()) {
       log.log("<--- BODY:");
-      log.log(convert.toString());
+      log.log(String.valueOf(convert));
     }
   }
 
@@ -508,7 +498,7 @@ public class RestAdapter {
    */
   public static class Builder {
     private Endpoint endpoint;
-    private Client client;
+    private OkHttpClient client;
     private Executor httpExecutor;
     private Executor callbackExecutor;
     private RequestInterceptor requestInterceptor;
@@ -536,7 +526,7 @@ public class RestAdapter {
     }
 
     /** The HTTP client used for requests. */
-    public Builder setClient(Client client) {
+    public Builder setClient(OkHttpClient client) {
       if (client == null) {
         throw new NullPointerException("Client may not be null.");
       }
